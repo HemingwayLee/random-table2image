@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Random Table2Image</title>
+<style>
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 2rem;
+    background: #f4f5f7;
+    color: #1a1a1a;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+    margin: 0 0 1.5rem;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 0.25rem;
+    border-bottom: 2px solid #d7d9dd;
+    margin-bottom: 1.5rem;
+  }
+
+  .tab-button {
+    appearance: none;
+    border: none;
+    background: transparent;
+    padding: 0.6rem 1.4rem;
+    font-size: 1rem;
+    cursor: pointer;
+    color: #555;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .tab-button:hover {
+    color: #111;
+  }
+
+  .tab-button.active {
+    color: #2f6fed;
+    border-bottom-color: #2f6fed;
+    font-weight: 600;
+  }
+
+  .tab-panel {
+    display: none;
+  }
+
+  .tab-panel.active {
+    display: block;
+  }
+
+  #generate-btn {
+    appearance: none;
+    border: none;
+    background: #2f6fed;
+    color: #fff;
+    padding: 0.6rem 1.4rem;
+    font-size: 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-bottom: 1.5rem;
+  }
+
+  #generate-btn:hover {
+    background: #2559c7;
+  }
+
+  #save-btn {
+    appearance: none;
+    border: none;
+    background: #2e9e5b;
+    color: #fff;
+    padding: 0.6rem 1.4rem;
+    font-size: 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-bottom: 1.5rem;
+    margin-left: 0.6rem;
+  }
+
+  #save-btn:hover {
+    background: #24803f;
+  }
+
+  #save-btn:disabled {
+    background: #9db8a9;
+    cursor: not-allowed;
+  }
+
+  #table-container {
+    overflow-x: auto;
+  }
+
+  #table-container table {
+    border-collapse: collapse;
+  }
+
+  #table-container td {
+    padding: 0;
+  }
+
+  .placeholder {
+    color: #777;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+  <h1>Random Table2Image</h1>
+
+  <div class="tabs">
+    <button class="tab-button active" data-tab="table">Table</button>
+    <button class="tab-button" data-tab="layout">Layout</button>
+  </div>
+
+  <section id="table" class="tab-panel active">
+    <button id="generate-btn">Generate</button>
+    <button id="save-btn" disabled>Save</button>
+    <div id="table-container"></div>
+  </section>
+
+  <section id="layout" class="tab-panel">
+    <p class="placeholder">Layout (coming soon)</p>
+  </section>
+
+  <script>
+    // --- Tab switching ---
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabPanels = document.querySelectorAll('.tab-panel');
+
+    tabButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        tabButtons.forEach(b => b.classList.remove('active'));
+        tabPanels.forEach(p => p.classList.remove('active'));
+        button.classList.add('active');
+        document.getElementById(button.dataset.tab).classList.add('active');
+      });
+    });
+
+    // --- Random table generation ---
+    const BORDER_STYLES = ['solid', 'dashed', 'dotted', 'double'];
+
+    function randomInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    function randomColor() {
+      const hue = randomInt(0, 359);
+      const saturation = randomInt(40, 80);
+      const lightness = randomInt(55, 85);
+      return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+    }
+
+    function randomBorderColor() {
+      const hue = randomInt(0, 359);
+      const saturation = randomInt(40, 80);
+      const lightness = randomInt(25, 50);
+      return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+    }
+
+    // Holds the most recently generated table's wrapper (table + margin), used by saveTable().
+    let currentWrapper = null;
+
+    function generateTable() {
+      const rowCount = randomInt(5, 20);
+      const colCount = randomInt(2, 8);
+      const colorByRow = Math.random() < 0.5;
+      const hasBorderColor = Math.random() < 0.7;
+      const hasCellColor = Math.random() < 0.7;
+
+      const borderColor = hasBorderColor ? randomBorderColor() : 'transparent';
+      const borderStyle = BORDER_STYLES[randomInt(0, BORDER_STYLES.length - 1)];
+      const borderWidth = randomInt(1, 6);
+      const borderCss = `${borderWidth}px ${borderStyle} ${borderColor}`;
+
+      const lineColors = [];
+      if (hasCellColor) {
+        const lineCount = colorByRow ? rowCount : colCount;
+        for (let i = 0; i < lineCount; i++) {
+          lineColors.push(randomColor());
+        }
+      }
+
+      // Tracks which grid cells are already covered by a previous row/col span.
+      const occupied = Array.from({ length: rowCount }, () => Array(colCount).fill(false));
+
+      const table = document.createElement('table');
+      // Set inline so the table's own styling doesn't depend on the page stylesheet
+      // (needed later when rasterizing the table into an image via saveTable()).
+      table.style.borderCollapse = 'collapse';
+
+      for (let r = 0; r < rowCount; r++) {
+        const tr = document.createElement('tr');
+        for (let c = 0; c < colCount; c++) {
+          if (occupied[r][c]) continue;
+
+          let colSpan = 1;
+          let rowSpan = 1;
+          if (Math.random() < 0.15) {
+            const wantColSpan = Math.random() < 0.5 ? Math.min(randomInt(2, 3), colCount - c) : 1;
+            const wantRowSpan = Math.random() < 0.5 ? Math.min(randomInt(2, 3), rowCount - r) : 1;
+            let fits = true;
+            for (let rr = r; rr < r + wantRowSpan && fits; rr++) {
+              for (let cc = c; cc < c + wantColSpan; cc++) {
+                if (occupied[rr][cc]) {
+                  fits = false;
+                  break;
+                }
+              }
+            }
+            if (fits) {
+              colSpan = wantColSpan;
+              rowSpan = wantRowSpan;
+            }
+          }
+
+          for (let rr = r; rr < r + rowSpan; rr++) {
+            for (let cc = c; cc < c + colSpan; cc++) {
+              occupied[rr][cc] = true;
+            }
+          }
+
+          const td = document.createElement('td');
+          if (colSpan > 1) td.colSpan = colSpan;
+          if (rowSpan > 1) td.rowSpan = rowSpan;
+          td.style.boxSizing = 'border-box';
+          td.style.padding = '0';
+          td.style.border = borderCss;
+          td.style.width = `${randomInt(20, 100)}px`;
+          td.style.height = `${randomInt(20, 80)}px`;
+          if (hasCellColor) {
+            td.style.backgroundColor = colorByRow ? lineColors[r] : lineColors[c];
+          }
+          tr.appendChild(td);
+        }
+        table.appendChild(tr);
+      }
+
+      const wrapper = document.createElement('div');
+      wrapper.style.display = 'inline-block';
+      wrapper.style.boxSizing = 'border-box';
+      wrapper.style.backgroundColor = '#ffffff';
+      wrapper.style.paddingTop = `${randomInt(10, 60)}px`;
+      wrapper.style.paddingRight = `${randomInt(10, 60)}px`;
+      wrapper.style.paddingBottom = `${randomInt(10, 60)}px`;
+      wrapper.style.paddingLeft = `${randomInt(10, 60)}px`;
+      wrapper.appendChild(table);
+
+      const container = document.getElementById('table-container');
+      container.innerHTML = '';
+      container.appendChild(wrapper);
+
+      currentWrapper = wrapper;
+      document.getElementById('save-btn').disabled = false;
+    }
+
+    function saveTable() {
+      if (!currentWrapper) return;
+
+      const rect = currentWrapper.getBoundingClientRect();
+      const width = Math.ceil(rect.width);
+      const height = Math.ceil(rect.height);
+
+      const clone = currentWrapper.cloneNode(true);
+      clone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+      clone.style.width = `${width}px`;
+      clone.style.height = `${height}px`;
+      clone.style.margin = '0';
+      clone.style.display = 'block';
+
+      const svgString =
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+        `<foreignObject width="100%" height="100%">${clone.outerHTML}</foreignObject>` +
+        `</svg>`;
+
+      // A data: URI (rather than a blob: URL) keeps the image same-origin even when this
+      // page itself is opened via file://, where every blob: URL gets treated as a
+      // distinct opaque origin and would otherwise taint the canvas on export.
+      const svgDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`;
+
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob((blob) => {
+          const link = document.createElement('a');
+          link.download = `table-${Date.now()}.png`;
+          link.href = URL.createObjectURL(blob);
+          link.click();
+          URL.revokeObjectURL(link.href);
+        }, 'image/png');
+      };
+      img.onerror = () => {
+        alert('Failed to render the table to an image.');
+      };
+      img.src = svgDataUrl;
+    }
+
+    document.getElementById('generate-btn').addEventListener('click', generateTable);
+    document.getElementById('save-btn').addEventListener('click', saveTable);
+  </script>
+
+</body>
+</html>
