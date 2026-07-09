@@ -206,8 +206,14 @@
       const rowCount = randomInt(5, 20);
       const colCount = randomInt(2, 8);
       const colorByRow = Math.random() < 0.5;
-      const hasBorderColor = Math.random() < 0.7;
-      const hasCellColor = Math.random() < 0.7;
+      let hasBorderColor = Math.random() < 0.7;
+      let hasCellColor = Math.random() < 0.7;
+      // Never let both be false at once — that combination renders as an
+      // all-white table indistinguishable from an empty/blank image.
+      if (!hasBorderColor && !hasCellColor) {
+        if (Math.random() < 0.5) hasBorderColor = true;
+        else hasCellColor = true;
+      }
 
       const borderColor = hasBorderColor ? randomBorderColor() : 'transparent';
       const borderStyle = BORDER_STYLES[randomInt(0, BORDER_STYLES.length - 1)];
