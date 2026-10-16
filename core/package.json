@@ -1,0 +1,8 @@
+{
+  "name": "random-table2image",
+  "private": true,
+  "description": "Generates synthetic table images and random-rectangle masks for LaMa training.",
+  "dependencies": {
+    "pngjs": "^7.0.0"
+  }
+}
