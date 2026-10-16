@@ -1,0 +1,4 @@
+*
+!generate.sh
+!core/
+core/node_modules

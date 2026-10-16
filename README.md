@@ -50,10 +50,94 @@ the folder can be used directly as a LaMa `val/` or `visual_test/` set.
 LaMa's default `train/` loader instead reads only `*.jpg` images and creates
 masks on the fly, so it won't pick up these PNGs.
 
+## Run with Docker
+
+The Docker image packages `generate.sh` with Node.js and its dependencies, so
+other systems can run it without installing anything except Docker.
+
+### Build the image
+
+From the repo root:
+
+```sh
+docker build -t random-table2image .
+```
+
+### Run it
+
+The image takes the same `<N> <folder>` arguments as `generate.sh`. The
+`folder` is a path *inside* the container, so mount a host folder onto it with
+`-v`:
+
+```sh
+mkdir -p dataset
+docker run --rm \
+  -u "$(id -u):$(id -g)" \
+  -v "$PWD/dataset:/out" \
+  random-table2image 100 /out
+```
+
+- `-v "$PWD/dataset:/out"` makes the container's `/out` write into `./dataset`
+  on your machine. The host path must be absolute, hence `$PWD`.
+- `-u "$(id -u):$(id -g)"` makes the generated files owned by you instead of
+  `root`.
+- `--rm` deletes the stopped container afterwards (the files stay in `dataset/`).
+
+The container needs no network access at run time, so it also works with
+`--network none`.
+
+### Share the image with other machines
+
+Push it to a registry that the other systems can pull from, e.g. Docker Hub:
+
+```sh
+docker tag random-table2image <your-user>/random-table2image:1.0
+docker push <your-user>/random-table2image:1.0
+```
+
+They can then run `<your-user>/random-table2image:1.0` in place of
+`random-table2image` in the command above.
+
+### Example: Kubernetes Job
+
+Any system that runs a container image with arguments can use it. For example,
+a Kubernetes Job that writes 10,000 pairs to a volume your training job reads:
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: generate-table-dataset
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: generate
+          image: <your-user>/random-table2image:1.0
+          args: ["10000", "/out"]
+          volumeMounts:
+            - name: dataset
+              mountPath: /out
+      volumes:
+        - name: dataset
+          persistentVolumeClaim:
+            claimName: lama-dataset   # an existing PVC
+```
+
+Each run writes a new random dataset. Files with the same name from a previous
+run are overwritten, so use an empty folder per run.
+
 ## Project layout
 
 ```
 generate.sh               # entry point
+Dockerfile                # container image around generate.sh
+.dockerignore             # keeps the build context to generate.sh + core/
 core/
 ├── generate_dataset.js   # writes the N image + mask pairs
 ├── table_generator.js    # random table layout + rasterization
