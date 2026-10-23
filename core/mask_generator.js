@@ -1,5 +1,6 @@
 // Random-rectangle mask rasterization for LaMa image/mask pairs. White (255) =
-// region to remove/inpaint, black (0) = keep.
+// region to remove/inpaint, black (0) = keep. Shared by generate_dataset.js
+// (Node) and index.html (browser).
 
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -56,13 +57,13 @@ function placeRects(width, height, rectCount) {
   return placed;
 }
 
-// Returns a raw RGBA buffer: { width, height, data: Buffer }, black background
+// Returns a raw RGBA buffer: { width, height, data: Uint8Array }, black background
 // with `rectCount` random, mutually non-overlapping white axis-aligned
 // rectangles (never fewer than MIN_RECTS requested, though see placeRects()
 // for the rare case placement itself has to give up early).
 function generateMaskRGBA(width, height, rectCount = randomRectCount()) {
   rectCount = Math.max(MIN_RECTS, rectCount);
-  const data = Buffer.alloc(width * height * 4);
+  const data = new Uint8Array(width * height * 4);
   for (let i = 3; i < data.length; i += 4) data[i] = 255; // opaque, black elsewhere
 
   const rects = placeRects(width, height, rectCount);
@@ -81,4 +82,7 @@ function generateMaskRGBA(width, height, rectCount = randomRectCount()) {
   return { width, height, data, rectCount: rects.length };
 }
 
-module.exports = { randomInt, randomRectCount, generateMaskRGBA, MIN_RECTS, MAX_RECTS };
+// In the browser (loaded via <script>) the functions above are page globals.
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { randomInt, randomRectCount, generateMaskRGBA, MIN_RECTS, MAX_RECTS };
+}

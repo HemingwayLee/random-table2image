@@ -150,12 +150,17 @@ core/
 ├── generate_dataset.js   # writes the N image + mask pairs
 ├── table_generator.js    # random table layout + rasterization
 ├── mask_generator.js     # random rectangle masks
-├── index.html            # browser preview: Generate / Save a single table
+├── index.html            # browser preview: Generate / Save image + mask pairs
 └── package.json
 ```
 
-`core/index.html` loads `core/table_generator.js`, the same code `generate.sh`
-uses, so there is only one copy of the table algorithm. Open it in a browser to
-preview tables one at a time. Enter a seed (or leave it empty for a random one;
-the seed used is shown next to the field) to get the exact table that
-`generate.sh <N> <folder> <seed>` writes as `table_00000.png`.
+`core/index.html` loads `core/table_generator.js` and `core/mask_generator.js`,
+the same code `generate.sh` uses, so there is only one copy of the algorithm.
+Open it in a browser to preview image + mask pairs one at a time.
+
+Seeds behave the same in both: images and masks within one run are all
+different, and the same seed always gives the same sequence. On the page, enter
+a seed (or leave it empty and a random one is filled in), then each Generate
+click shows the next pair, so the k-th click equals `table_<k-1>.png` and its
+mask from `generate.sh <N> <folder> <seed>`. Editing the seed restarts the
+sequence. Save downloads the current pair under the same file names.
