@@ -1,9 +1,22 @@
-// Headless port of index.html's generateTable()/saveTable(): builds the same random
-// table structure and rasterizes it straight to an RGBA buffer (no DOM/canvas), using
-// the same algorithm as the page.
+// Random table generator shared by generate_dataset.js (Node) and index.html
+// (browser): builds a random table structure and rasterizes it straight to an
+// RGBA buffer (no DOM/canvas), so both produce pixel-identical images.
 
 const BORDER_STYLES = ['solid', 'dashed', 'dotted', 'double'];
 const PATTERN_TYPES = ['dots', 'stripes', 'grid'];
+
+// mulberry32: small, fast 32-bit seeded PRNG returning floats in [0, 1).
+// Assign the result to Math.random to make generation reproducible.
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -31,16 +44,14 @@ function randomBorderColor() {
   return hslToRgb(randomInt(0, 359), randomInt(40, 80), randomInt(25, 50));
 }
 
-// Mirrors shiftLightness() in index.html: same hue/saturation, lightness moved
-// by `delta` percentage points (clamped to 0-100).
+// Same hue/saturation, lightness moved by `delta` percentage points (clamped to 0-100).
 function shiftLightness(hsl, delta) {
   return { h: hsl.h, s: hsl.s, l: Math.min(100, Math.max(0, hsl.l + delta)) };
 }
 
-// Mirrors randomBackground() in index.html: a solid color, or (50% chance) a
-// repeating dot/stripe/grid pattern rendered with a darker accent shade of the
-// same base color. Colors are resolved to RGB up front (rather than kept as
-// CSS strings) since the renderer paints pixels directly, not through a DOM.
+// A solid color, or (50% chance) a repeating dot/stripe/grid pattern rendered
+// with a darker accent shade of the same base color. Colors are resolved to RGB
+// up front since the renderer paints pixels directly, not through a DOM.
 function randomBackgroundSpec(baseHsl) {
   const baseRgb = hslToRgb(baseHsl.h, baseHsl.s, baseHsl.l);
   if (Math.random() >= 0.5) return { kind: 'solid', color: baseRgb };
@@ -52,7 +63,7 @@ function randomBackgroundSpec(baseHsl) {
   return { kind: 'pattern', pattern, base: baseRgb, accent: accentRgb, size };
 }
 
-// Builds the same cell/grid structure as generateTable() in index.html.
+// Builds the random cell/grid structure (sizes, spans, colors, padding).
 function buildTable() {
   const rowCount = randomInt(5, 20);
   const colCount = randomInt(2, 8);
@@ -145,7 +156,7 @@ function layoutTable({ rowCount, colCount, cells }) {
   return { colWidths, rowHeights, colX, rowY, tableWidth: colX[colCount], tableHeight: rowY[rowCount] };
 }
 
-// Rasterizes a table into a raw RGBA buffer: { width, height, data: Buffer }.
+// Rasterizes a table into a raw RGBA buffer: { width, height, data: Uint8Array }.
 // data is top-to-bottom, left-to-right, 4 bytes/pixel (R,G,B,A), fully opaque.
 function rasterizeToRGBA(table) {
   const { rowCount, colCount, cells, occupied, borderColor, borderWidth, padding } = table;
@@ -153,7 +164,7 @@ function rasterizeToRGBA(table) {
 
   const width = padding.left + tableWidth + padding.right;
   const height = padding.top + tableHeight + padding.bottom;
-  const data = Buffer.alloc(width * height * 4, 255); // opaque white background
+  const data = new Uint8Array(width * height * 4).fill(255); // opaque white background
 
   function setPixel(x, y, color) {
     if (x < 0 || y < 0 || x >= width || y >= height) return;
@@ -242,4 +253,7 @@ function generateTableRGBA() {
   return rasterizeToRGBA(table);
 }
 
-module.exports = { buildTable, layoutTable, rasterizeToRGBA, generateTableRGBA };
+// In the browser (loaded via <script>) the functions above are page globals.
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { mulberry32, buildTable, layoutTable, rasterizeToRGBA, generateTableRGBA };
+}

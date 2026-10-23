@@ -12,18 +12,25 @@ The first run installs the Node dependency (`pngjs`) into `core/` automatically.
 ## Usage
 
 ```sh
-./generate.sh <N> <folder>
+./generate.sh <N> <folder> [seed]
 ```
 
 | Argument | Description |
 | -------- | ----------- |
 | `N`      | Number of image + mask pairs to generate (positive integer). |
 | `folder` | Output folder. Created if it doesn't exist. |
+| `seed`   | Optional non-negative integer. The same `seed` and `N` reproduce exactly the same images and masks. If omitted, a random seed is used; it is printed at the end of the run so you can reproduce it later. |
 
 Example: generate 100 pairs into `dataset/`:
 
 ```sh
 ./generate.sh 100 dataset
+```
+
+Same, but reproducible:
+
+```sh
+./generate.sh 100 dataset 42
 ```
 
 If you get `permission denied`, make the script executable first with
@@ -65,7 +72,7 @@ docker build -t random-table2image .
 
 ### Run it
 
-The image takes the same `<N> <folder>` arguments as `generate.sh`. The
+The image takes the same `<N> <folder> [seed]` arguments as `generate.sh`. The
 `folder` is a path *inside* the container, so mount a host folder onto it with
 `-v`:
 
@@ -129,7 +136,8 @@ spec:
             claimName: lama-dataset   # an existing PVC
 ```
 
-Each run writes a new random dataset. Files with the same name from a previous
+Each run writes a new random dataset unless you pass a fixed seed (e.g.
+`args: ["10000", "/out", "42"]`). Files with the same name from a previous
 run are overwritten, so use an empty folder per run.
 
 ## Project layout
@@ -146,5 +154,8 @@ core/
 └── package.json
 ```
 
-`core/index.html` uses the same table algorithm. Open it in a browser to preview
-tables one at a time.
+`core/index.html` loads `core/table_generator.js`, the same code `generate.sh`
+uses, so there is only one copy of the table algorithm. Open it in a browser to
+preview tables one at a time. Enter a seed (or leave it empty for a random one;
+the seed used is shown next to the field) to get the exact table that
+`generate.sh <N> <folder> <seed>` writes as `table_00000.png`.
