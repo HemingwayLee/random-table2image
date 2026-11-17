@@ -1,0 +1,41 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+      # core/package*.json, so the generator's Node dependencies are installed in the image.
+      additional_contexts:
+        generator: ./core
+    environment:
+      WATCHFILES_FORCE_POLLING: "true"
+      GENERATE_SCRIPT: /generator/generate.sh
+      OUTPUT_DIR: /output
+      MAX_COUNT: ${MAX_COUNT:-100000}
+      MAX_CONCURRENT_RUNS: ${MAX_CONCURRENT_RUNS:-2}
+    ports:
+      - "8766:8766"
+    volumes:
+      - ./backend:/app
+      # The generator itself. Each run starts a new generate.sh, so edits to it or core/ apply to the next run.
+      - ./generate.sh:/generator/generate.sh:ro
+      - ./core:/generator/core
+      # Keep the image's node_modules instead of the (possibly missing) host one.
+      - /generator/core/node_modules
+      # Generated datasets land in ./output/<run id>/ on your machine.
+      - ./output:/output
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    environment:
+      API_PROXY_TARGET: http://backend:8766
+      VITE_USE_POLLING: "true"
+    ports:
+      - "5679:5679"
+    volumes:
+      - ./frontend:/app
+      # Keep the container's node_modules instead of the (possibly empty) host one.
+      - /app/node_modules
+    depends_on:
+      - backend

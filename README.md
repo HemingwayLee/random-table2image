@@ -57,95 +57,58 @@ the folder can be used directly as a LaMa `val/` or `visual_test/` set.
 LaMa's default `train/` loader instead reads only `*.jpg` images and creates
 masks on the fly, so it won't pick up these PNGs.
 
-## Run with Docker
+Files with the same name from a previous run are overwritten, so use an empty
+folder per run.
 
-The Docker image packages `generate.sh` with Node.js and its dependencies, so
-other systems can run it without installing anything except Docker.
+## Web app (Docker Compose)
 
-### Build the image
-
-From the repo root:
-
-```sh
-docker build -t random-table2image .
-```
-
-### Run it
-
-The image takes the same `<N> <folder> [seed]` arguments as `generate.sh`. The
-`folder` is a path *inside* the container, so mount a host folder onto it with
-`-v`:
+A small web UI around `generate.sh`: pick N and an optional seed, watch the
+run's progress, browse the image + mask pairs, and download them as a zip.
+FastAPI backend and React + MUI + Vite frontend, both hot reloading.
 
 ```sh
-mkdir -p dataset
-docker run --rm \
-  -u "$(id -u):$(id -g)" \
-  -v "$PWD/dataset:/out" \
-  random-table2image 100 /out
+docker compose -f docker-compose.dev.yml up --build
 ```
 
-- `-v "$PWD/dataset:/out"` makes the container's `/out` write into `./dataset`
-  on your machine. The host path must be absolute, hence `$PWD`.
-- `-u "$(id -u):$(id -g)"` makes the generated files owned by you instead of
-  `root`.
-- `--rm` deletes the stopped container afterwards (the files stay in `dataset/`).
+| Service  | URL                        |
+| -------- | -------------------------- |
+| UI       | http://localhost:5679      |
+| API      | http://localhost:8766/api  |
+| API docs | http://localhost:8766/docs |
 
-The container needs no network access at run time, so it also works with
-`--network none`.
+- Each run executes `generate.sh <N> /output/<run id> [seed]` in the backend
+  container, so the files land in `./output/<run id>/` on your machine, named
+  exactly as above. Run records (status, seed, log) are in `./output/.runs/`.
+- Without a seed, the random seed `generate.sh` picks is read from its output
+  and shown on the run, so any run can be reproduced.
+- At most `MAX_CONCURRENT_RUNS` (default 2) runs generate at once; the rest
+  wait. N is capped at `MAX_COUNT` (default 100000). Set either in the shell
+  or a `.env` file.
+- Cancel stops the run (its pairs so far are kept). Delete removes its folder.
+- A backend restart or reload stops running runs; they are marked as errors.
+- API: `POST /api/runs` (`{"count": 100, "seed": 42}`), `GET /api/runs`,
+  `GET /api/runs/{id}`, `POST /api/runs/{id}/cancel`, `DELETE /api/runs/{id}`,
+  `GET /api/runs/{id}/pairs`, `GET /api/runs/{id}/files/{name}`,
+  `GET /api/runs/{id}/zip`.
 
-### Share the image with other machines
-
-Push it to a registry that the other systems can pull from, e.g. Docker Hub:
+Hot reload: edits under `frontend/src` (Vite HMR) and `backend/app` (uvicorn
+`--reload`) apply at once. `generate.sh` and `core/` are mounted into the
+backend, and every run starts a fresh process, so edits there apply to the
+next run. After changing dependencies (`package.json`, `requirements.txt` or
+`core/package.json`), rebuild with fresh `node_modules` volumes:
 
 ```sh
-docker tag random-table2image <your-user>/random-table2image:1.0
-docker push <your-user>/random-table2image:1.0
+docker compose -f docker-compose.dev.yml up --build -V
 ```
-
-They can then run `<your-user>/random-table2image:1.0` in place of
-`random-table2image` in the command above.
-
-### Example: Kubernetes Job
-
-Any system that runs a container image with arguments can use it. For example,
-a Kubernetes Job that writes 10,000 pairs to a volume your training job reads:
-
-```yaml
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: generate-table-dataset
-spec:
-  backoffLimit: 0
-  template:
-    spec:
-      restartPolicy: Never
-      securityContext:
-        runAsUser: 1000
-        runAsGroup: 1000
-      containers:
-        - name: generate
-          image: <your-user>/random-table2image:1.0
-          args: ["10000", "/out"]
-          volumeMounts:
-            - name: dataset
-              mountPath: /out
-      volumes:
-        - name: dataset
-          persistentVolumeClaim:
-            claimName: lama-dataset   # an existing PVC
-```
-
-Each run writes a new random dataset unless you pass a fixed seed (e.g.
-`args: ["10000", "/out", "42"]`). Files with the same name from a previous
-run are overwritten, so use an empty folder per run.
 
 ## Project layout
 
 ```
 generate.sh               # entry point
-Dockerfile                # container image around generate.sh
-.dockerignore             # keeps the build context to generate.sh + core/
+docker-compose.dev.yml    # web app: backend + frontend, hot reloading
+backend/app/              # FastAPI: runs generate.sh, serves the results
+frontend/src/             # React + MUI UI
+output/                   # web app runs (git-ignored)
 core/
 ├── generate_dataset.js   # writes the N image + mask pairs
 ├── table_generator.js    # random table layout + rasterization
